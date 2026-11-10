@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3b82f6">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="健身日历">
+<title>健身日历</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #f5f6f8; color: #1f2937; max-width: 520px; margin: 0 auto; min-height: 100vh; }
+  header { background: #3b82f6; color: #fff; padding: 14px 16px; display: flex;
+           align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+  header h1 { font-size: 18px; }
+  header .btns button { background: rgba(255,255,255,.2); color: #fff; border: none;
+           border-radius: 8px; padding: 6px 10px; font-size: 13px; margin-left: 6px; cursor: pointer; }
+  .month-nav { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 4px; }
+  .month-nav b { font-size: 16px; }
+  .month-nav button { background: none; border: 1px solid #d1d5db; border-radius: 8px;
+           width: 32px; height: 32px; font-size: 16px; cursor: pointer; color: #374151; }
+  .weekday, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 0 12px; }
+  .weekday span { text-align: center; font-size: 12px; color: #6b7280; padding: 4px 0; }
+  .day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center;
+         justify-content: center; border-radius: 10px; cursor: pointer; font-size: 15px;
+         background: #fff; border: none; gap: 3px; }
+  .day.today { box-shadow: inset 0 0 0 1.5px #3b82f6; }
+  .day.selected { background: #3b82f6; color: #fff; }
+  .day .dots { display: flex; gap: 3px; align-items: center; }
+  .day .dot { width: 5px; height: 5px; border-radius: 50%; }
+  .day.selected .dot { outline: 1px solid rgba(255,255,255,.6); outline-offset: 1px; }
+  .day .more { font-size: 8px; }
+  .day.empty { background: transparent; cursor: default; }
+  .stats { margin: 12px 16px; background: #fff; border-radius: 12px; padding: 12px 14px; }
+  .stats h2 { font-size: 14px; color: #6b7280; margin-bottom: 10px; }
+  .stats .total { font-size: 15px; margin-bottom: 10px; }
+  .stats .total b { font-size: 22px; color: #3b82f6; }
+  .bars { display: flex; flex-direction: column; gap: 6px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .bar-row .name { width: 42px; text-align: center; color: #fff; border-radius: 6px;
+                   padding: 2px 0; font-size: 12px; flex-shrink: 0; }
+  .bar-row .track { flex: 1; height: 10px; background: #f3f4f6; border-radius: 5px; overflow: hidden; }
+  .bar-row .fill { height: 100%; border-radius: 5px; }
+  .bar-row .cnt { width: 52px; text-align: right; color: #6b7280; font-size: 12px; flex-shrink: 0; }
+  .list { padding: 4px 16px 90px; }
+  .list h2 { font-size: 14px; color: #6b7280; margin: 8px 0; }
+  .rec { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
+         display: flex; align-items: center; justify-content: space-between; }
+  .rec .tag { font-size: 11px; color: #fff; border-radius: 6px;
+              padding: 2px 8px; margin-bottom: 4px; display: inline-block; }
+  .rec .del { background: none; border: none; color: #ef4444; font-size: 18px; cursor: pointer; padding: 4px; }
+  .rec p { font-size: 15px; }
+  .rec .meta { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+  .hint { text-align: center; color: #9ca3af; font-size: 13px; padding: 40px 0; }
+  .fab { position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px; border-radius: 50%;
+         background: #3b82f6; color: #fff; font-size: 28px; border: none; cursor: pointer;
+         box-shadow: 0 4px 12px rgba(59,130,246,.4); display: none; }
+  dialog { border: none; border-radius: 16px; padding: 20px; width: min(90vw, 380px); }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog h3 { margin-bottom: 14px; font-size: 17px; }
+  dialog label { display: block; font-size: 13px; color: #6b7280; margin: 10px 0 4px; }
+  dialog input, dialog select { width: 100%; padding: 9px 10px; border: 1px solid #d1d5db;
+         border-radius: 8px; font-size: 15px; }
+  dialog .row { display: flex; gap: 10px; }
+  dialog .actions { display: flex; gap: 10px; margin-top: 18px; }
+  dialog .actions button { flex: 1; padding: 10px; border-radius: 8px; border: none;
+         font-size: 15px; cursor: pointer; }
+  .btn-cancel { background: #f3f4f6; color: #374151; }
+  .btn-save { background: #3b82f6; color: #fff; }
+  .btn-save:disabled { opacity: .5; }
+  input[type=file] { display: none; }
+  .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+           background: #1f2937; color: #fff; padding: 10px 18px; border-radius: 10px;
+           font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 90vw; z-index: 50; }
+  .toast.show { opacity: 1; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 2px; }
+  .toggle-row span { margin: 0; font-size: 13px; color: #6b7280; }
+  .toggle-row input { width: auto; transform: scale(1.2); }
+  .super-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .super-row input { flex: 1; padding: 8px 9px; min-width: 0; }
+  .super-row .del-row { width: 30px; height: 38px; background: #f3f4f6; color: #ef4444;
+      border: none; border-radius: 6px; cursor: pointer; flex-shrink: 0; font-size: 14px; }
+  .add-row { width: 100%; padding: 9px; background: #eef2ff; color: #3b82f6;
+      border: 1px dashed #c7d2fe; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  .super-rec { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
+      display: flex; align-items: flex-start; justify-content: space-between; }
+  .super-rec .sets-list { margin-top: 6px; }
+  .super-rec .set-line { font-size: 14px; color: #374151; padding: 2px 0; }
+  .super-rec .set-line .w { color: #3b82f6; font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>💪 健身日历</h1>
+  <div class="btns">
+    <button onclick="document.getElementById('importFile').click()">导入</button>
+    <button onclick="exportJSON()">导出</button>
+  </div>
+  <input type="file" id="importFile" accept="application/json,.json">
+</header>
+
+<div class="month-nav">
+  <button onclick="changeMonth(-1)">‹</button>
+  <b id="monthTitle"></b>
+  <button onclick="changeMonth(1)">›</button>
+</div>
+<div class="weekday"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+<div class="grid" id="grid"></div>
+
+<div class="stats" id="stats"></div>
+
+<div class="list" id="list"></div>
+<button class="fab" id="fab" onclick="openAdd()">＋</button>
+
+<dialog id="addDialog">
+  <h3>添加训练 <span id="addDateLabel" style="color:#3b82f6"></span></h3>
+  <label>训练部位</label>
+  <select id="fBody"></select>
+  <label>动作名称</label>
+  <input id="fName">
+  <label class="toggle-row">
+    <span>超级组（一个动作多个重量/次数）</span>
+    <input type="checkbox" id="fSuper" onchange="toggleSuper()">
+  </label>
+  <div id="singleFields">
+    <label>重量（kg，0 = 自重）</label>
+    <input id="fWeight" type="number" min="0" step="0.5">
+    <div class="row">
+      <div style="flex:1"><label>次数</label><input id="fReps" type="number" min="1"></div>
+      <div style="flex:1"><label>组数</label><input id="fSets" type="number" min="1"></div>
+    </div>
+  </div>
+  <div id="superFields" style="display:none">
+    <label>各组（重量 kg × 次数 × 组数）</label>
+    <div id="superRows"></div>
+    <button type="button" class="add-row" onclick="addSuperRow()">＋ 添加一组</button>
+  </div>
+  <div class="actions">
+    <button class="btn-cancel" onclick="addDialog.close()">取消</button>
+    <button class="btn-save" id="btnSave" onclick="saveRecord()">保存</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// 固定五类训练部位 + 配色
+const BODY_PARTS = ['胸', '背', '腿', '肩', '手臂'];
+const PART_COLORS = {
+  '胸':  '#3b82f6',  // 蓝
+  '背':  '#10b981',  // 绿
+  '腿':  '#f59e0b',  // 橙
+  '肩':  '#8b5cf6',  // 紫
+  '手臂': '#ef4444'   // 红
+};
+// 兼容旧数据：不属于五类的部位以中性灰显示（保留但不能新增）
+const partColor = p => PART_COLORS[p] || '#9ca3af';
+
+const KEY = 'fitness-calendar-records';
+const LAST_KEY = 'fitness-calendar-last-input';
+
+let records = JSON.parse(localStorage.getItem(KEY) || '[]');
+let view = new Date();
+let selected = null;
+
+const fmtKey = d => {
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+};
+const save = () => localStorage.setItem(KEY, JSON.stringify(records));
+
+// 记住上次填写的信息，作为下次默认值
+const saveLastInput = r => localStorage.setItem(LAST_KEY, JSON.stringify({
+  bodyPart: r.bodyPart, name: r.name, weight: r.weight, reps: r.reps, sets: r.sets
+}));
+const loadLastInput = () => {
+  try { return JSON.parse(localStorage.getItem(LAST_KEY)) || null; } catch { return null; }
+};
+
+// ---- 超级组 ----
+let superGroupCounter = 0;
+function newGroupId() {
+  return 'g_' + Date.now() + '_' + (superGroupCounter++).toString(36);
+}
+function toggleSuper() {
+  const on = document.getElementById('fSuper').checked;
+  document.getElementById('singleFields').style.display = on ? 'none' : '';
+  document.getElementById('superFields').style.display = on ? '' : 'none';
+  if (on && document.getElementById('superRows').children.length === 0) {
+    addSuperRow(); addSuperRow();  // 默认两行
+  }
+  validate();
+}
+function addSuperRow() {
+  const rows = document.getElementById('superRows');
+  const row = document.createElement('div');
+  row.className = 'super-row';
+  row.innerHTML =
+    '<input type="number" min="0" step="0.5" placeholder="重量kg" class="sw">' +
+    '<input type="number" min="1" placeholder="次数" class="sr">' +
+    '<input type="number" min="1" placeholder="组数" class="ss">' +
+    '<button type="button" class="del-row" onclick="delSuperRow(this)">✕</button>';
+  rows.appendChild(row);
+  [...row.querySelectorAll('input')].forEach(i => i.addEventListener('input', validate));
+}
+function delSuperRow(btn) {
+  const rows = document.getElementById('superRows');
+  if (rows.children.length > 1) btn.parentElement.remove();
+  validate();
+}
+function collectSuperSets() {
+  const out = [];
+  document.getElementById('superRows').querySelectorAll('.super-row').forEach(row => {
+    const w = +row.querySelector('.sw').value;
+    const r = +row.querySelector('.sr').value;
+    const s = +row.querySelector('.ss').value;
+    if (r > 0 && s > 0 && w >= 0) out.push({ weight: w || 0, reps: r, sets: s });
+  });
+  return out;
+}
+
+const toast = msg => {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+};
+
+function changeMonth(delta) {
+  view = new Date(view.getFullYear(), view.getMonth() + delta, 1);
+  render();
+}
+
+// 当前显示月份内每天练过的部位集合：{ '2025-03-08': Set{'胸','背'}, ... }
+function monthPartsMap() {
+  const y = view.getFullYear(), m = view.getMonth();
+  const map = {};
+  records.forEach(r => {
+    if (typeof r.date !== 'string') return;
+    const parts = r.date.split('-').map(Number);
+    if (parts[0] === y && parts[1] === m + 1) {
+      (map[r.date] = map[r.date] || new Set()).add(r.bodyPart);
+    }
+  });
+  return map;
+}
+
+function render() {
+  document.getElementById('monthTitle').textContent =
+    view.getFullYear() + ' 年 ' + (view.getMonth() + 1) + ' 月';
+
+  // ---- 日历网格 ----
+  const grid = document.getElementById('grid');
+  grid.textContent = '';
+  const first = new Date(view.getFullYear(), view.getMonth(), 1);
+  const days = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+  const today = fmtKey(new Date());
+  const partsMap = monthPartsMap();
+
+  for (let i = 0; i < first.getDay(); i++) {
+    const e = document.createElement('button');
+    e.className = 'day empty'; e.disabled = true;
+    grid.appendChild(e);
+  }
+  for (let d = 1; d <= days; d++) {
+    const date = new Date(view.getFullYear(), view.getMonth(), d);
+    const key = fmtKey(date);
+    const b = document.createElement('button');
+    b.className = 'day'
+      + (key === today ? ' today' : '')
+      + (selected === key ? ' selected' : '');
+    b.appendChild(document.createTextNode(String(d)));
+    const parts = partsMap[key];
+    if (parts && parts.size) {
+      const dots = document.createElement('div');
+      dots.className = 'dots';
+      // 每个部位一个色点，最多显示 4 个，超出显示 +n
+      [...parts].slice(0, 4).forEach(p => {
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = partColor(p);
+        dot.title = p;
+        dots.appendChild(dot);
+      });
+      if (parts.size > 4) {
+        const more = document.createElement('span');
+        more.className = 'more';
+        more.textContent = '+' + (parts.size - 4);
+        dots.appendChild(more);
+      }
+      b.appendChild(dots);
+    }
+    b.onclick = () => { selected = key; render(); };
+    grid.appendChild(b);
+  }
+
+  renderStats(partsMap);
+  renderList();
+}
+
+// ---- 月度统计：本月练了多少天、各部位各多少天（按天计，不按动作条数） ----
+function renderStats(partsMap) {
+  const stats = document.getElementById('stats');
+  stats.textContent = '';
+
+  const title = document.createElement('h2');
+  title.textContent = view.getFullYear() + ' 年 ' + (view.getMonth() + 1) + ' 月统计';
+  stats.appendChild(title);
+
+  const trainedDays = Object.keys(partsMap).length;
+  const total = document.createElement('div');
+  total.className = 'total';
+  total.append('本月训练 ');
+  const b = document.createElement('b');
+  b.textContent = trainedDays;
+  total.appendChild(b);
+  total.append(' 天');
+  stats.appendChild(total);
+
+  // 同一天练胸和背 → 两类各计 1 天；总训练天数只计 1 天
+  const perPart = {};
+  BODY_PARTS.forEach(p => perPart[p] = 0);
+  Object.values(partsMap).forEach(set =>
+    set.forEach(p => { if (p in perPart) perPart[p]++; }));
+
+  const maxDays = Math.max(1, trainedDays);
+  const bars = document.createElement('div');
+  bars.className = 'bars';
+  BODY_PARTS.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.style.background = partColor(p);
+    name.textContent = p;
+    const track = document.createElement('div');
+    track.className = 'track';
+    const fill = document.createElement('div');
+    fill.className = 'fill';
+    fill.style.background = partColor(p);
+    fill.style.width = perPart[p] === 0 ? '0' : ((perPart[p] / maxDays) * 100) + '%';
+    track.appendChild(fill);
+    const cnt = document.createElement('span');
+    cnt.className = 'cnt';
+    cnt.textContent = perPart[p] + ' 天';
+    row.append(name, track, cnt);
+    bars.appendChild(row);
+  });
+  stats.appendChild(bars);
+}
+
+function dayRecords(key) {
+  // 保持记录原始顺序（导入顺序 = 训练顺序），不再按部位/名称排序
+  return records.filter(r => r.date === key);
+}
+
+// ---- 当天记录列表（DOM + textContent，防 HTML 注入） ----
+function renderList() {
+  const list = document.getElementById('list');
+  const fab = document.getElementById('fab');
+  list.textContent = '';
+  const groupRendered = new Set();
+  if (!selected) {
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = '点击日历中的日期查看 / 添加训练';
+    list.appendChild(p);
+    fab.style.display = 'none';
+    return;
+  }
+  fab.style.display = 'block';
+  const recs = dayRecords(selected);
+  const h = document.createElement('h2');
+  h.textContent = new Date(selected + 'T00:00:00')
+    .toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
+  list.appendChild(h);
+  if (!recs.length) {
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = '当天暂无记录，点击右下角 ＋ 添加';
+    list.appendChild(p);
+    return;
+  }
+  recs.forEach(r => {
+    // 超级组成员：跳过已被合并处理的（仅处理每组的第一个）
+    if (r.group && groupRendered.has(r.group)) return;
+    if (r.group) groupRendered.add(r.group);
+
+    if (r.group) {
+      // 收集整组成员
+      const members = recs.filter(x => x.group === r.group);
+      const div = document.createElement('div');
+      div.className = 'super-rec';
+      const left = document.createElement('div');
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.style.background = partColor(r.bodyPart);
+      tag.textContent = r.bodyPart + ' · 超级组';
+      const p = document.createElement('p');
+      p.textContent = r.name;
+      const setsList = document.createElement('div');
+      setsList.className = 'sets-list';
+      members.forEach(m => {
+        const line = document.createElement('div');
+        line.className = 'set-line';
+        const w = m.weight > 0 ? '<span class="w">' + m.weight + 'kg</span>' : '<span class="w">自重</span>';
+        line.innerHTML = w + ' × ' + m.reps + ' 次 × ' + m.sets + ' 组';
+        setsList.appendChild(line);
+      });
+      left.append(tag, p, setsList);
+      const del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '✕';
+      del.onclick = () => delRecord(r.id);
+      div.append(left, del);
+      list.appendChild(div);
+      return;
+    }
+
+    const div = document.createElement('div');
+    div.className = 'rec';
+    const left = document.createElement('div');
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.style.background = partColor(r.bodyPart);
+    tag.textContent = r.bodyPart;   // 保留部位文字，不只靠颜色区分
+    const p = document.createElement('p');
+    const w = r.weight > 0 ? r.weight + 'kg' : '自重';
+    p.textContent = r.name + '：' + w + ' × ' + r.reps + '次 × ' + r.sets + '组';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = '总容量 ' + (r.weight * r.reps * r.sets).toFixed(1) + ' kg';
+    left.append(tag, p, meta);
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = '✕';
+    del.onclick = () => delRecord(r.id);
+    div.append(left, del);
+    list.appendChild(div);
+  });
+}
+
+// ---- 添加记录：默认值 = 上次填写的信息 ----
+function openAdd() {
+  document.getElementById('addDateLabel').textContent = '· ' + selected;
+  // 复位超级组状态
+  document.getElementById('fSuper').checked = false;
+  document.getElementById('singleFields').style.display = '';
+  document.getElementById('superFields').style.display = 'none';
+  document.getElementById('superRows').textContent = '';
+  const last = loadLastInput();
+  document.getElementById('fBody').value =
+    last && BODY_PARTS.includes(last.bodyPart) ? last.bodyPart : BODY_PARTS[0];
+  document.getElementById('fName').value = last ? last.name : '';
+  document.getElementById('fWeight').value = last ? last.weight : 0;
+  document.getElementById('fReps').value = last ? last.reps : '';
+  document.getElementById('fSets').value = last ? last.sets : '';
+  validate();
+  document.getElementById('addDialog').showModal();
+  document.getElementById('fName').focus();
+}
+
+function validate() {
+  let ok = !!document.getElementById('fName').value.trim();
+  if (document.getElementById('fSuper').checked) {
+    ok = ok && collectSuperSets().length > 0;
+  } else {
+    ok = ok
+      && +document.getElementById('fReps').value > 0
+      && +document.getElementById('fSets').value > 0
+      && +document.getElementById('fWeight').value >= 0;
+  }
+  document.getElementById('btnSave').disabled = !ok;
+}
+['fName', 'fReps', 'fSets', 'fWeight'].forEach(id =>
+  document.getElementById(id).addEventListener('input', validate));
+
+function saveRecord() {
+  const bodyPart = document.getElementById('fBody').value;
+  const name = document.getElementById('fName').value.trim();
+  const isSuper = document.getElementById('fSuper').checked;
+
+  if (isSuper) {
+    const groupId = newGroupId();
+    const sets = collectSuperSets();
+    if (sets.length === 0) { toast('请填写至少一组的重量/次数/组数'); return; }
+    sets.forEach(s => {
+      records.push({
+        id: Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        date: selected, bodyPart, name,
+        weight: s.weight, reps: s.reps, sets: s.sets,
+        group: groupId
+      });
+    });
+    saveLastInput({ bodyPart, name, weight: sets[0].weight, reps: sets[0].reps, sets: sets[0].sets });
+  } else {
+    const rec = {
+      id: Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+      date: selected, bodyPart, name,
+      weight: +document.getElementById('fWeight').value || 0,
+      reps: +document.getElementById('fReps').value,
+      sets: +document.getElementById('fSets').value
+    };
+    records.push(rec);
+    saveLastInput(rec);
+  }
+  save();
+  document.getElementById('addDialog').close();
+  document.getElementById('fSuper').checked = false;
+  document.getElementById('singleFields').style.display = '';
+  document.getElementById('superFields').style.display = 'none';
+  document.getElementById('superRows').textContent = '';
+  render();
+  toast('已保存 ✓');
+}
+
+function delRecord(id) {
+  const target = records.find(r => r.id === id);
+  // 超级组成员一起删
+  records = records.filter(r => !(r.id === id || (target && target.group && r.group === target.group)));
+  save(); render();
+  toast('已删除');
+}
+
+// ---------- JSON 导入导出 ----------
+document.getElementById('importFile').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const payload = JSON.parse(await file.text());
+    if (payload.version !== 1 || !Array.isArray(payload.workouts))
+      throw new Error('格式不正确，需要 { version: 1, workouts: [...] }');
+    let added = 0, skipped = 0;
+    payload.workouts.forEach(w => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(w.date)) { skipped += (w.exercises || []).length; return; }
+      (w.exercises || []).forEach(x => {
+        // 部位必须是五类之一，否则跳过（旧数据保留，但不新增其他部位）
+        if (!BODY_PARTS.includes(x.bodyPart)) { skipped++; return; }
+        if (!x.name || typeof x.name !== 'string'
+            || !(+x.reps > 0) || !(+x.sets > 0) || !(+x.weight >= 0)) { skipped++; return; }
+        records.push({
+          id: Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+          date: w.date,
+          bodyPart: x.bodyPart,
+          name: x.name.slice(0, 50),
+          weight: +x.weight || 0,
+          reps: +x.reps, sets: +x.sets,
+          group: x.group || undefined
+        });
+        added++;
+      });
+    });
+    save(); render();
+    toast('导入成功 ' + added + ' 条' + (skipped ? '，跳过 ' + skipped + ' 条无效数据' : ''));
+  } catch (err) {
+    toast('导入失败：' + err.message);
+  }
+});
+
+function exportJSON() {
+  const byDate = {};
+  records.forEach(r => {
+    (byDate[r.date] = byDate[r.date] || []).push({
+      bodyPart: r.bodyPart, name: r.name, weight: r.weight, reps: r.reps, sets: r.sets,
+      group: r.group || undefined
+    });
+  });
+  const payload = {
+    version: 1,
+    workouts: Object.entries(byDate)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, exercises]) => ({ date, exercises }))
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '健身记录_' + fmtKey(new Date()) + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ---------- init ----------
+const fBody = document.getElementById('fBody');
+BODY_PARTS.forEach(p => {
+  const o = document.createElement('option');
+  o.textContent = p; o.value = p;
+  fBody.appendChild(o);
+});
+selected = fmtKey(new Date());   // 默认选中今天
+render();
+
+// PWA 注册（file:// 下自动跳过）
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+// 尽量让系统保留本地数据（减少被清理概率）
+navigator.storage?.persist?.().catch(() => {});
+</script>
+</body>
+</html>
